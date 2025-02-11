@@ -1,7 +1,5 @@
 import crypto from 'crypto';
-
-// In-memory token storage (replace with database in production)
-const tokenStore = new Map();
+import { sessionDb } from '../db/db.js';
 
 // Generate a secure random token
 const generateToken = () => {
@@ -9,7 +7,7 @@ const generateToken = () => {
 };
 
 // Verify token middleware
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -17,30 +15,42 @@ export const verifyToken = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const userId = tokenStore.get(token);
+    
+    try {
+        const session = await sessionDb.verifySession(token);
+        
+        if (!session) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
 
-    if (!userId) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
+        // Add user info to request object
+        req.user = {
+            id: session.user_id,
+            email: session.email,
+            name: session.name,
+            token
+        };
+        next();
+    } catch (error) {
+        console.error('Session verification error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Add user info to request object
-    req.user = { id: userId, token };
-    next();
 };
 
 // Session management functions
 export const sessions = {
-    create: (userId) => {
+    create: async (userId) => {
         const token = generateToken();
-        tokenStore.set(token, userId);
+        await sessionDb.createSession(userId, token);
         return { token, userId };
     },
 
-    verify: (token) => {
-        return tokenStore.get(token);
+    verify: async (token) => {
+        const session = await sessionDb.verifySession(token);
+        return session ? session.user_id : null;
     },
 
-    remove: (token) => {
-        return tokenStore.delete(token);
+    remove: async (token) => {
+        await sessionDb.deleteSession(token);
     }
 };
