@@ -1,25 +1,46 @@
-import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
-export const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+// In-memory token storage (replace with database in production)
+const tokenStore = new Map();
 
-    if (!token) {
-        return res.status(401).json({
-            code: 401,
-            message: 'Authentication token required'
-        });
+// Generate a secure random token
+const generateToken = () => {
+    return crypto.randomBytes(32).toString('hex');
+};
+
+// Verify token middleware
+export const verifyToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
     }
 
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = { id: decoded.user_id };
-        req.session = { id: decoded.session_id };
-        next();
-    } catch (err) {
-        return res.status(403).json({
-            code: 403,
-            message: 'Invalid or expired token'
-        });
+    const token = authHeader.split(' ')[1];
+    const userId = tokenStore.get(token);
+
+    if (!userId) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Add user info to request object
+    req.user = { id: userId, token };
+    next();
+};
+
+// Session management functions
+export const sessions = {
+    create: (userId) => {
+        const token = generateToken();
+        tokenStore.set(token, userId);
+        return { token, userId };
+    },
+
+    verify: (token) => {
+        return tokenStore.get(token);
+    },
+
+    remove: (token) => {
+        return tokenStore.delete(token);
     }
 };
