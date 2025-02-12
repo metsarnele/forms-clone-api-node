@@ -6,8 +6,8 @@ const generateToken = () => {
     return crypto.randomBytes(32).toString('hex');
 };
 
-// Verify token middleware
-export const verifyToken = async (req, res, next) => {
+// Verify token middleware (this is your 'authenticateToken' logic)
+export const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -15,10 +15,10 @@ export const verifyToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    
+
     try {
         const session = await sessionDb.verifySession(token);
-        
+
         if (!session) {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
